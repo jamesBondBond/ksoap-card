@@ -1,0 +1,1000 @@
+package com.example.friends;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.HashMap;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.ksoap2.SoapEnvelope;
+import org.ksoap2.serialization.SoapObject;
+import org.ksoap2.serialization.SoapPrimitive;
+import org.ksoap2.serialization.SoapSerializationEnvelope;
+import org.ksoap2.transport.HttpTransportSE;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.content.ContentResolver;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.database.CursorIndexOutOfBoundsException;
+import android.net.Uri;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.preference.PreferenceManager;
+import android.provider.ContactsContract;
+import android.util.DisplayMetrics;
+import android.util.Log;
+import android.view.View;
+import android.view.View.OnLongClickListener;
+import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemClickListener;
+import android.widget.AdapterView.OnItemSelectedListener;
+import android.widget.ListAdapter;
+import android.widget.ListView;
+import android.widget.SimpleAdapter;
+import android.widget.Spinner;
+import android.widget.SpinnerAdapter;
+import android.widget.Toast;
+
+import com.actionbarsherlock.app.ActionBar;
+import com.actionbarsherlock.app.SherlockActivity;
+import com.actionbarsherlock.internal.widget.IcsAdapterView;
+import com.actionbarsherlock.internal.widget.IcsAdapterView.OnItemLongClickListener;
+import com.example.cardapp.Cards;
+import com.example.cardapp.ConnectionDetector;
+import com.example.cardapp.MainActivity;
+import com.example.cardapp.MyCardAdapter;
+import com.example.cardapp.MyCards;
+import com.example.cardapp.R;
+import com.example.cardapp.SpinnerNavItem;
+import com.example.cardapp.TitleNavigationAdapter;
+import com.example.datacard.DatabaseHelper;
+
+public class Search extends Activity implements OnItemLongClickListener{
+
+	public static String KEY_REGISTERED_PHONE_NO = "REGISTERED_PHONE_NO";
+	ArrayList<HashMap<String, String>> contactList, serverlist, finallist,newconatctlist;
+	Cursor names;
+	ListView friendlist, fulllist;
+	String[] serverarray;
+	String name1, number, phoneno_sharedpref;
+	SearchAdapter adapter;
+	ArrayList<HashMap<String, String>> alldetails,alldetailspinner,grouparray,containarry;
+	SharedPreferences shardpref;
+	DatabaseHelper db;
+	String sendcard_id,sendcard_phoneno; 
+	ActionBar actionbar;
+	ActionBar actionBar;// = getSupportActionBar();
+	private ArrayList<SpinnerNavItem> navSpinner;
+	private TitleNavigationAdapter titleadapter;
+	Spinner spinner;
+	int flag;
+    
+    private final String NAMESPACE = "http://tempuri.org/";
+    private final String URL = "http://202.164.62.212/AppCard/wsCardImage.asmx?wsdl";
+    private final String SOAP_ACTION_CHECK_SUBCR = "http://tempuri.org/GetAllRegisteredPhoneNo";
+    private final String METHOD_NAME_CHECK_SUBCR = "GetAllRegisteredPhoneNo"; //16
+    ArrayList<HashMap<String, String>> mycontacts,receivecontacts,matchcontacts;
+	String mynumbers;
+	@Override
+	public void onCreate(Bundle savedInstanceState) {
+		// TODO Auto-generated method stub
+
+		super.onCreate(savedInstanceState);
+		setContentView(R.layout.invite);
+		fulllist = (ListView) findViewById(R.id.contact_list);
+		finallist = new ArrayList<HashMap<String, String>>();
+		grouparray = new ArrayList<HashMap<String, String>>();
+		mycontacts=new ArrayList<HashMap<String,String>>();
+		
+		receivecontacts=new ArrayList<HashMap<String,String>>();
+		db = new DatabaseHelper(getApplicationContext());
+		alldetails = new ArrayList<HashMap<String, String>>();
+		alldetailspinner = new ArrayList<HashMap<String, String>>();
+		//actionBar = getSupportActionBar();
+		shardpref = PreferenceManager
+				.getDefaultSharedPreferences(getApplicationContext());
+		phoneno_sharedpref = shardpref.getString(MainActivity.KEY_LOGIN_PHONE_NO, "");
+		spinner=(Spinner)findViewById(R.id.spinner);
+		//getcards();
+		/*actionBar.setNavigationMode(ActionBar.NAVIGATION_MODE_LIST);
+		navSpinner = new ArrayList<SpinnerNavItem>();
+		navSpinner.add(new SpinnerNavItem("My Card", R.drawable.ic_launcher));
+		navSpinner.add(new SpinnerNavItem("My Friends", R.drawable.ic_launcher));
+		navSpinner.add(new SpinnerNavItem("Received cards",
+				R.drawable.ic_launcher));
+		titleadapter = new TitleNavigationAdapter(getApplicationContext(),
+				navSpinner);
+		actionBar.setListNavigationCallbacks(titleadapter, Search.this);*/
+		
+		new allcontacts().execute();
+		Intent intent=getIntent();
+		String id = intent.getStringExtra("friend");
+		if (id.equalsIgnoreCase("do")) {
+			ConnectionDetector conect=new ConnectionDetector(getApplicationContext());
+			if (conect.isConnectingToInternet()) {
+			//	db.deleteMyfriends();
+				DatabaseHelper db=new DatabaseHelper(getApplicationContext());
+				newconatctlist = new ArrayList<HashMap<String, String>>();
+			//contactList.clear();
+				newconatctlist=db.getFriendslist();
+					Log.d("Chakle", newconatctlist+"");
+					db.deleteMyfriends();
+					Log.d("Chakledubara", contactList+"");
+				new changecontacts().execute();
+			}
+		}
+		
+		
+	}
+@Override
+protected void onStart() {
+	// TODO Auto-generated method stub
+
+	
+		super.onStart();
+	}
+	void getcards() {
+
+		String alldetail = shardpref.getString("mycardarraylist", "");
+		//Log.i("fdlkhgfd", alldetail);
+		alldetails.clear();
+		JSONArray jsonArray;
+		
+		try {
+			jsonArray = new JSONArray(alldetail);
+		
+				for (int i = 0; i < jsonArray.length(); i++) {
+					
+				JSONObject obj = jsonArray.getJSONObject(i);
+				String cardid = obj.getString(MyCards.KEY_CARD_ID);
+				String cardtype = obj.getString(MyCards.KEY_CARD_TYPE);
+				
+				
+				String name = obj.getString(MyCards.KEY_NAME);
+				String cardno = obj.getString(MyCards.KEY_CARD_PHONE_NO);
+				String email = obj.getString(MyCards.KEY_EMAIL);
+				String compnyname = obj.getString(MyCards.KEY_COMPANY_NAME);
+				String designation = obj.getString(MyCards.KEY_DESIGNATION);
+				//String cardtype = obj.getString(MyCards.KEY_CARD_TYPE);
+				String weburl = obj.getString(MyCards.KEY_WEB_URL);
+			//	String cardid = obj.getString(MyCards.KEY_CARD_ID);
+
+				
+				
+				HashMap<String, String> map = new HashMap<String, String>();
+				//map.put(MyCards.KEY_CARD_ID,cardid);
+			//	map.put(MyCards.KEY_CARD_TYPE,cardtype);
+				map.put(MyCards.KEY_EMAIL, email);
+				map.put(MyCards.KEY_NAME, name);
+				map.put(MyCards.KEY_COMPANY_NAME, compnyname);
+				map.put(MyCards.KEY_CARD_PHONE_NO, cardno);
+				map.put(MyCards.KEY_DESIGNATION, designation);
+				map.put(MyCards.KEY_CARD_TYPE, cardtype);
+				map.put(MyCards.KEY_WEB_URL, weburl);
+				map.put(MyCards.KEY_CARD_ID, cardid);
+				alldetails.add(map);
+
+
+			}
+		} catch (JSONException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		
+	}
+	void getcardsinspinner() {
+		alldetailspinner.clear();
+		String alldetail = shardpref.getString("mycardarraylist", "");
+		//Log.i("fdlkhgfd", alldetail);
+		HashMap<String, String> map = new HashMap<String, String>();
+		map.put(MyCards.KEY_CARD_TYPE,"All");
+		alldetailspinner.add(map);
+		JSONArray jsonArray;
+		
+		try {
+			jsonArray = new JSONArray(alldetail);
+		
+				for (int i = 0; i < jsonArray.length(); i++) {
+					
+				JSONObject obj = jsonArray.getJSONObject(i);
+				String cardid = obj.getString(MyCards.KEY_CARD_ID);
+				String cardtype = obj.getString(MyCards.KEY_CARD_TYPE);
+				
+				
+				String name = obj.getString(MyCards.KEY_NAME);
+				String cardno = obj.getString(MyCards.KEY_CARD_PHONE_NO);
+				String email = obj.getString(MyCards.KEY_EMAIL);
+				String compnyname = obj.getString(MyCards.KEY_COMPANY_NAME);
+				String designation = obj.getString(MyCards.KEY_DESIGNATION);
+				//String cardtype = obj.getString(MyCards.KEY_CARD_TYPE);
+				String weburl = obj.getString(MyCards.KEY_WEB_URL);
+			//	String cardid = obj.getString(MyCards.KEY_CARD_ID);
+
+				
+			   map = new HashMap<String, String>();
+				//	map.put(MyCards.KEY_CARD_TYPE,cardtype);
+			
+				map.put(MyCards.KEY_CARD_TYPE, cardtype);
+			
+				alldetailspinner.add(map);
+
+
+			}
+		} catch (JSONException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		
+	}
+	
+	/*void sendList(){
+		
+		AlertDialog.Builder builderSingle = new AlertDialog.Builder(
+				Search.this);
+		builderSingle.setIcon(R.drawable.ic_launcher);
+		builderSingle.setTitle("Choose a Card");
+
+		String[] from = new String[] { MyCards.KEY_CARD_TYPE };
+		int[] to = new int[] { android.R.id.text1 };
+
+		ListAdapter arrayAdapter;
+
+		arrayAdapter = new SimpleAdapter(Search.this, alldetails,android.R.layout.simple_list_item_1, from, to);
+
+		builderSingle.setNegativeButton("Cancel",
+				new DialogInterface.OnClickListener() {
+
+					@Override
+					public void onClick(DialogInterface dialog,
+							int which) {
+						dialog.dismiss();
+					}
+				});
+
+		builderSingle.setAdapter(arrayAdapter,
+				new DialogInterface.OnClickListener() {
+
+					@Override
+					public void onClick(DialogInterface dialog,
+							int which) {
+
+						Log.i("dsloiyh", which + "");
+
+						String userId = alldetails.get(which).get(MyCards.KEY_CARD_ID);
+						String firstName = arraylist.get(which).get(
+								KEY_FirstName);
+						String companyId = arraylist.get(which).get(
+								KEY_CompanyId);
+						String username = arraylist.get(which).get(
+								KEY_UserName);
+						
+					}
+				});
+
+		builderSingle.show();
+	}
+	*/
+/*public void call()
+{
+	DatabaseHelper db=new DatabaseHelper(Search.this);
+	newconatctlist = new ArrayList<HashMap<String, String>>();
+//contactList.clear();
+	newconatctlist=db.getFriendslist();
+		Log.d("Chakle", newconatctlist+"");
+		db.deleteMyfriends();
+		Log.d("Chakledubara", contactList+"");
+	
+	new changecontacts().execute();
+}*/
+	public class changecontacts extends AsyncTask<Void, Void, Void>
+	{
+	
+String str;
+ProgressDialog pDialog;
+@Override
+		protected void onPreExecute() {
+			// TODO Auto-generated method stub
+			pDialog = new ProgressDialog(Search.this);
+			pDialog.show();
+			pDialog.setCancelable(false);
+			pDialog.setContentView(R.layout.progressbar);
+			super.onPreExecute();
+		}
+		@Override
+		protected Void doInBackground(Void... params) {
+			// TODO Auto-generated method stub
+		
+			
+			try {
+				Uri uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI;
+				ContentResolver cr = getContentResolver();
+				Cursor cur = cr.query(ContactsContract.Contacts.CONTENT_URI,
+						null, null, null, null);
+
+				String[] projection = new String[] {
+						ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+						ContactsContract.CommonDataKinds.Phone.NUMBER };
+				names = getContentResolver().query(uri, projection, null, null,
+						null);
+				int indexName = names
+						.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+				int indexNumber = names
+						.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+
+				names.moveToFirst();
+				do {
+
+					name1 = names.getString(indexName);
+					number = names.getString(indexNumber);
+
+					/*
+					 * StringTokenizer tokens = new StringTokenizer(number,
+					 * "-"); String first = tokens.nextToken();// String secound
+					 * = tokens.nextToken();// String thrid =
+					 * tokens.nextToken();//
+					 * number_from_phn=first+secound+thrid;
+					 */
+					if (number.contains(phoneno_sharedpref)) {
+						//continue;
+					}else
+					
+					if (number.length()>=10 ) {
+						if (number.length()>10) {
+							number=number.substring(number.length()-10, number.length());
+						}
+						number=number.replace("-", "");
+						number=number.replace(" ", "");
+						mynumbers=mynumbers+","+number+"";	
+						HashMap<String, String> map = new HashMap<String, String>();
+						map.put("name", name1);
+						map.put("Phoneno",number);
+						mycontacts.add(map);
+					}
+					
+					// adding each child node to HashMap key => value
+					/*if (str.contains(number)) {
+						db.insertmyfriends(name1, number,"All");
+					}*/
+
+				} while (names.moveToNext());
+
+			String Responce=MyNumberss(mynumbers);
+			JSONArray jsonArray = new JSONArray(Responce);
+			for (int i = 0; i < jsonArray.length(); i++) {
+				JSONObject jobject=jsonArray.getJSONObject(i);
+				String number=jobject.getString("REGISTERED_PHONE_NO");
+				HashMap<String, String> map=new HashMap<String, String>();
+				map.put("Phoneno", number);
+				receivecontacts.add(map);
+			}
+			//Log.i("My Contacts", mycontacts+"");
+			Log.i("Recieved Contacts", receivecontacts+"");
+			for (int i = 0; i < receivecontacts.size(); i++) {
+				String phone=receivecontacts.get(i).get("Phoneno");
+				for (int j = 0; j < mycontacts.size(); j++) {
+					
+					if ((mycontacts.get(j).get("Phoneno")).equalsIgnoreCase(phone)) {
+						HashMap<String, String> map=new HashMap<String, String>();
+						map.put("phone", mycontacts.get(j).get("Phoneno"));
+						map.put("name",  mycontacts.get(j).get("name"));
+						finallist.add(map);
+					//	db.insertmyfriends(mycontacts.get(j).get("name"), mycontacts.get(j).get("Phoneno"),"All");
+						break;
+					}	
+					
+				}
+
+			}
+			Log.d("Final list", finallist+"");
+			Log.i("newconatctlist Contact list", newconatctlist+"");
+			for (int i = 0; i < finallist.size(); i++) {
+				for (int j = 0; j < newconatctlist.size(); j++) {
+					if (newconatctlist.size()==0) {
+						db.insertmyfriends(finallist.get(i).get("name"),finallist.get(i).get("phone"), "All");
+						break;
+					}else{
+					if (finallist.get(i).get("phone").equalsIgnoreCase(newconatctlist.get(j).get(DatabaseHelper.KEY_PHONENO))) {
+						db.insertmyfriends(newconatctlist.get(j).get(DatabaseHelper.KEY_MY_NAME),newconatctlist.get(j).get(DatabaseHelper.KEY_PHONENO), newconatctlist.get(j).get(DatabaseHelper.KEY_MY_CARDS));
+						break;
+					}else
+					{
+						db.insertmyfriends(finallist.get(i).get("name"),finallist.get(i).get("phone"), "All");
+						break;
+					}}
+				}
+			}
+			} catch (Exception e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+
+	        
+	        
+	        
+	        
+		        
+		        
+			return null;
+		}
+		@Override
+				protected void onPostExecute(Void result) {
+					// TODO Auto-generated method stub
+			//contactList.clear();
+			/*contactList = new ArrayList<HashMap<String, String>>();
+			contactList.clear();
+			contactList=db.getFriendslist();*/
+			pDialog.dismiss();
+		new allcontacts().execute();
+			Log.d("FRom database", contactList+"");
+			//adapter = new SearchAdapter(Search.this, contactList,alldetails);
+		//	adapter.notifyDataSetChanged();
+			//fulllist.notifyAll();
+			//fulllist.setAdapter(adapter);
+			
+					super.onPostExecute(result);
+				}
+		
+	}
+	class allcontacts extends AsyncTask<Void, Void, Void> {
+
+		String str;
+		int lenght;
+
+		@Override
+		protected void onPreExecute() {
+			// TODO Auto-generated method stub
+			super.onPreExecute();
+			//contactList.clear();
+		}
+
+		@Override
+		protected Void doInBackground(Void... params) {
+			// TODO Auto-generated method stub
+			contactList = new ArrayList<HashMap<String, String>>();
+		//	contactList.clear();
+			contactList=db.getFriendslist();
+			
+			
+			/*HttpClient httpClient = new DefaultHttpClient();
+
+			HttpGet get = new HttpGet(
+					"http://202.164.62.212/AppCard/testwcf.Service1.svc/GetAllRegisteredPhoneNo"); // For
+
+			HttpResponse response;
+			try {
+				response = httpClient.execute(get);
+				str = inputStreamToString(response.getEntity().getContent())
+						.toString();
+				String s = new String();
+				s = str.replace("\\", "");
+				Log.w("aaaa", s);
+				int l = s.length();
+				s = s.substring(1, l - 1);
+				JSONArray jsonArray = new JSONArray(s);
+				Log.w("fdlkhgfd", "" + jsonArray.length());
+				lenght = jsonArray.length();
+				if (lenght > 0) {
+
+					for (int i = 0; i < jsonArray.length(); i++) {
+						JSONObject obj = jsonArray.getJSONObject(i);
+						String phone = obj.getString(Search.KEY_REGISTERED_PHONE_NO);
+
+						
+					}
+				}
+
+			} catch (ClientProtocolException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (JSONException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}*/
+
+			return null;
+		}
+
+		@Override
+		protected void onPostExecute(Void result) {
+			// TODO Auto-generated method stub
+/*
+			
+
+
+			try {
+				Uri uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI;
+				ContentResolver cr = getContentResolver();
+				Cursor cur = cr.query(ContactsContract.Contacts.CONTENT_URI,
+						null, null, null, null);
+
+				String[] projection = new String[] {
+						ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+						ContactsContract.CommonDataKinds.Phone.NUMBER };
+				names = getContentResolver().query(uri, projection, null, null,
+						null);
+				int indexName = names
+						.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME);
+				int indexNumber = names
+						.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER);
+
+				names.moveToFirst();
+				do {
+
+					name1 = names.getString(indexName);
+					number = names.getString(indexNumber);
+
+					
+					 * StringTokenizer tokens = new StringTokenizer(number,
+					 * "-"); String first = tokens.nextToken();// String secound
+					 * = tokens.nextToken();// String thrid =
+					 * tokens.nextToken();//
+					 * number_from_phn=first+secound+thrid;
+					 
+
+					HashMap<String, String> map = new HashMap<String, String>();
+
+					// adding each child node to HashMap key => value
+					if (str.contains(number)) {
+						map.put("name", name1);
+						map.put("mobile", number);
+
+						// adding HashList to ArrayList
+						finallist.add(map);
+					}
+
+				} while (names.moveToNext());
+
+			} catch (CursorIndexOutOfBoundsException e) {
+				// TODO: handle exception
+				// Toast.makeText(getBaseContext(), "No contacts found",
+				// Toast.LENGTH_LONG).show();
+			}*/
+			// Log.i("hello", )
+			getcards();
+			getcardsinspinner();
+			//Log.i("alldetaisl",alldetails+"");
+			SpinnerAdapter adapter2=new SimpleAdapter(Search.this, alldetailspinner,
+	                android.R.layout.simple_spinner_item, new String[] {DatabaseHelper.KEY_MY_CARDS}, new int[] {
+              android.R.id.text1});
+		((SimpleAdapter) adapter2).setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+		spinner.setAdapter(adapter2);
+		//Log.i("contact list", contactList+"");
+		spinner.setOnItemSelectedListener(new OnItemSelectedListener() {
+		 
+
+			
+
+			@Override
+			public void onItemSelected(AdapterView<?> arg0, View arg1,
+					int position, long arg3) {
+				// TODO Auto-generated method stub
+				flag=position;
+				if (position==0) {
+					//contactList = new ArrayList<HashMap<String, String>>();
+					contactList.clear();
+					contactList=db.getFriendslist();
+					adapter = new SearchAdapter(Search.this, contactList,alldetails);
+					fulllist.setAdapter(adapter);
+				}else{
+				String group=alldetails.get(position-1).get(DatabaseHelper.KEY_MY_CARDS);
+				Log.i("Group", group);
+				contactList.clear();
+				//contactList=new ArrayList<HashMap<String,String>>();
+				contactList=db.getFriendslistgroup(group);
+				Log.i("array", grouparray+"");
+				adapter = new SearchAdapter(Search.this, contactList,alldetails);
+				fulllist.setAdapter(adapter);
+				}
+			}
+
+			@Override
+			public void onNothingSelected(AdapterView<?> arg0) {
+				// TODO Auto-generated method stub
+				
+			}
+		});
+		//adapter = new SearchAdapter(Search.this, contactList,alldetails);
+		//fulllist.setAdapter(adapter);
+		
+		
+		
+			fulllist.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+
+				
+
+				@Override
+				public boolean onItemLongClick(AdapterView<?> arg0, View arg1,
+						final int position, long arg3) {
+					//getcards();
+					// TODO Auto-generated method stub
+					AlertDialog.Builder builderSingle = new AlertDialog.Builder(Search.this);
+					builderSingle.setIcon(R.drawable.ic_launcher);
+					builderSingle.setTitle("Add to Group");
+
+					String[] from = new String[] {"CARD_TYPE"};
+					int[] to = new int[] { android.R.id.text1 };
+
+					
+					SimpleAdapter arrayAdapter = new SimpleAdapter(Search.this, alldetails,android.R.layout.simple_list_item_1, from, to);
+
+					builderSingle.setNegativeButton("Cancel",
+							new DialogInterface.OnClickListener() {
+
+								@Override
+								public void onClick(DialogInterface dialog,
+										int which) {
+									dialog.dismiss();
+								}
+							});
+
+					builderSingle.setAdapter(arrayAdapter,
+							new DialogInterface.OnClickListener() {
+
+								@Override
+								public void onClick(DialogInterface dialog,
+										int which) {
+									String phonenoo;
+									String cardId = alldetails.get(which).get("CARD_ID");
+								//	if (flag==0) {
+										phonenoo=contactList.get(position).get(DatabaseHelper.KEY_PHONENO);
+								/*	}else {
+										phonenoo=grouparray.get(position).get(DatabaseHelper.KEY_PHONENO);
+									}
+									*/
+									String companyname  = alldetails.get(which).get(MyCards.KEY_COMPANY_NAME);
+									String myname= alldetails.get(which).get(MyCards.KEY_NAME);
+									String designation= alldetails.get(which).get(MyCards.KEY_DESIGNATION);
+									String contact= alldetails.get(which).get(MyCards.KEY_CARD_PHONE_NO);
+									String email = alldetails.get(which).get(MyCards.KEY_EMAIL);
+									String webpage = alldetails.get(which).get(MyCards.KEY_WEB_URL);
+									String cardtype=alldetails.get(which).get(DatabaseHelper.KEY_MY_CARDS);
+									Log.i("hello",cardId+phonenoo+companyname+myname+designation+contact+email+webpage +cardtype);
+									db.updatefriends(cardtype, phonenoo);
+								
+								}
+							});
+
+					builderSingle.show();
+					return false;
+				}
+				
+
+	        
+
+				
+	        }); 
+			/*ConnectionDetector conect=new ConnectionDetector(getApplicationContext());
+			if (conect.isConnectingToInternet()) {
+			//	db.deleteMyfriends();
+				DatabaseHelper db=new DatabaseHelper(getApplicationContext());
+				db.deleteMyfriends();
+				new changecontacts().execute();
+			}*/
+			//ConnectionDetector conect=new ConnectionDetector(getApplicationContext());
+			//if (conect.isConnectingToInternet()) {
+				  
+				//db.deleteMyfriends();
+				
+			//	new changecontacts().execute();
+			//	String Responce=MyNumberss(mynumbers);
+				/*try {
+					JSONArray jsonArray = new JSONArray(Responce);
+					int length=jsonArray.length();
+					int datalenght=contactList.size();
+					if (length!=datalenght) {
+						
+					}
+				} catch (JSONException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}*/
+				
+		//	}
+			super.onPostExecute(result);
+		}
+	}
+
+	private StringBuilder inputStreamToString(InputStream is) {
+		String line = "";
+		StringBuilder total = new StringBuilder();
+		// Wrap a BufferedReader around the InputStream
+		BufferedReader rd = new BufferedReader(new InputStreamReader(is));
+		// Read response until the end
+		try {
+
+			while ((line = rd.readLine()) != null) {
+				total.append(line);
+			}
+		} catch (IOException e) {
+
+			e.printStackTrace();
+		}
+		// Return full string
+		return total;
+	}
+	
+	
+	public void sendcard(String phoneno, String cardid){
+		
+		sendcard_id=cardid;
+		sendcard_phoneno=phoneno;
+
+		new SendCard().execute();
+		
+	}
+	
+	
+	class SendCard extends AsyncTask<Void, Void, Void> {
+		
+		String str;
+		String result1;
+		int length;
+		
+		// ProgressDialog pDialog;
+		@Override
+		protected void onPreExecute() {
+			// TODO Auto-generated method stub
+			/*
+			 * pDialog = new ProgressDialog(getApplicationContext());
+			 * pDialog.show(); pDialog.setCancelable(false);
+			 * pDialog.setContentView(R.layout.progressbar);
+			 */
+			super.onPreExecute();
+		}
+
+		@Override
+		protected Void doInBackground(Void... params) {
+			// TODO Auto-generated method stub
+			try {
+
+				HttpClient httpClient = new DefaultHttpClient();
+
+				HttpGet get = new HttpGet(
+						"http://202.164.62.212/AppCard/testwcf.Service1.svc/SendCard?CardID="
+								+ sendcard_id + "&FromPhoneNo=" + phoneno_sharedpref
+								+ "&ToPhoneNo=" + sendcard_phoneno + "&GeoLocation="
+								+ "kjhfdgjkh"); // For
+
+				HttpResponse response = httpClient.execute(get);
+				str = inputStreamToString(response.getEntity().getContent())
+						.toString();
+
+				Log.w("responce", str);
+				String s = new String();
+				s = str.replace("\\", "");
+				Log.w("aaaa", s);
+				int l = s.length();
+				s = s.substring(1, l - 1);
+				Log.w("aaaa", s);
+
+				JSONArray jsonArray = new JSONArray(s);
+			//	Log.w("fdlkhgfd", "" + jsonArray.length());
+
+				length = jsonArray.length();
+
+				if (length > 0) {
+			
+					for (int i = 0; i < jsonArray.length(); i++) {
+						JSONObject obj = jsonArray.getJSONObject(i);
+						result1 = obj.getString("RESULT");
+					}
+				}
+			} catch (Exception e) {
+				Log.w("kljhfdg", "hello123" + e);
+			}
+			return null;
+		}
+
+		@Override
+		protected void onPostExecute(Void result) {
+			// TODO Auto-generated method stub
+			if (result1.equalsIgnoreCase("1")) {
+				Toast.makeText(getApplicationContext(), "Sent Successfully",
+						1000).show();
+			}else{
+				Toast.makeText(getApplicationContext(), "Sent Successfully",1000).show();
+			}
+			super.onPostExecute(result);
+		}
+
+	}
+
+	public String MyNumberss(String number) {
+
+		SoapObject request = new SoapObject(NAMESPACE, METHOD_NAME_CHECK_SUBCR);
+
+		request.addProperty("strPhoneNo",number);// st_assigned_UserId);
+		
+
+		SoapSerializationEnvelope envelope = new SoapSerializationEnvelope(
+				SoapEnvelope.VER11);
+		envelope.dotNet = true;
+
+		envelope.setOutputSoapObject(request);
+		HttpTransportSE transportSE = new HttpTransportSE(URL, 1000 * 45);
+		transportSE.debug = true;
+		try {
+			transportSE.call(SOAP_ACTION_CHECK_SUBCR, envelope);
+			SoapPrimitive response = (SoapPrimitive) envelope.getResponse();
+
+			return response.toString();
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			return e.getMessage();
+		}
+	}
+	
+
+	@Override
+	public boolean onItemLongClick(IcsAdapterView<?> parent, View view,
+			final int position, long id) {
+		// TODO Auto-generated method stub
+		AlertDialog.Builder builderSingle = new AlertDialog.Builder(Search.this);
+		builderSingle.setIcon(R.drawable.ic_launcher);
+		builderSingle.setTitle("Choose a Card");
+
+		String[] from = new String[] {"CARD_TYPE"};
+		int[] to = new int[] { android.R.id.text1 };
+
+		
+		SimpleAdapter arrayAdapter = new SimpleAdapter(Search.this, alldetails,android.R.layout.simple_list_item_1, from, to);
+
+		builderSingle.setNegativeButton("Cancel",
+				new DialogInterface.OnClickListener() {
+
+					@Override
+					public void onClick(DialogInterface dialog,
+							int which) {
+						dialog.dismiss();
+					}
+				});
+
+		builderSingle.setAdapter(arrayAdapter,
+				new DialogInterface.OnClickListener() {
+
+					@Override
+					public void onClick(DialogInterface dialog,
+							int which) {
+						ConnectionDetector detector=new ConnectionDetector(Search.this);
+						if (detector.isConnectingToInternet()) {
+							
+							String cardId = alldetails.get(which).get("CARD_ID");
+							String phonenoo=contactList.get(position).get(DatabaseHelper.KEY_PHONENO);
+							
+						//	Toast.makeText(activity, cardId+ "  "+data.get(position).get("mobile"), 1000).show();
+						
+						sendcard(phonenoo,cardId);
+							
+						}else{
+							
+							String cardId = contactList.get(which).get("CARD_ID");
+							String phonenoo=alldetails.get(position).get("mobile");
+							String companyname  = contactList.get(which).get(MyCards.KEY_COMPANY_NAME);
+							String  myname= contactList.get(which).get(MyCards.KEY_NAME);
+							String  designation= contactList.get(which).get(MyCards.KEY_DESIGNATION);
+							String  contact= contactList.get(which).get(MyCards.KEY_CARD_PHONE_NO);
+							String email = contactList.get(which).get(MyCards.KEY_EMAIL);
+							String webpage = contactList.get(which).get(MyCards.KEY_WEB_URL);
+							
+							String message = "Company Name:"+ companyname+ "\n"+ "My Name:"	+ myname+ "\n"+ "Designation:"+ designation+ "\n"+ "Contact:"+ contact+ "\n"+ "Email:"+ email+ "\n"+ "Webpage:" + webpage;
+
+							
+							
+             		}
+					/*	Log.i("dsloiyh", which + "");
+
+						String cardId = carddetails.get(which).get("CARD_ID");
+						
+						String phonenoo=data.get(position).get("mobile");
+						
+					//	Toast.makeText(activity, cardId+ "  "+data.get(position).get("mobile"), 1000).show();
+						
+						Search search=(Search)activity;
+						search.sendcard(phonenoo,cardId);*/
+						
+						
+						/*String firstName = arraylist.get(which).get(
+								KEY_FirstName);
+						String companyId = arraylist.get(which).get(
+								KEY_CompanyId);
+						String username = arraylist.get(which).get(
+								KEY_UserName);*/
+					}
+				});
+
+		builderSingle.show();
+		return false;
+	}
+
+}
+
+/*
+ * class GetMyCards extends AsyncTask<Void, Void, Void> {
+ * 
+ * String str; int length; //ProgressDialog pDialog;
+ * 
+ * @Override protected void onPreExecute() { // TODO Auto-generated method stub
+ * super.onPreExecute(); alldetails.clear(); pDialog = new
+ * ProgressDialog(getApplicationContext()); pDialog.show();
+ * pDialog.setCancelable(false); pDialog.setContentView(R.layout.progressbar); }
+ * 
+ * @Override protected Void doInBackground(Void... params) { // TODO
+ * Auto-generated method stub
+ * 
+ * try { InputStream result = null;
+ * 
+ * HttpClient httpClient = new DefaultHttpClient();
+ * 
+ * HttpGet get = new HttpGet(
+ * "http://202.164.62.212/AppCard/testwcf.Service1.svc/GetOwnCardDetails?CardID="
+ * +"0"+"&PhoneNo="+phoneno_sharedpref); // For
+ * 
+ * HttpResponse response = httpClient.execute(get); str =
+ * inputStreamToString(response.getEntity().getContent()) .toString();
+ * 
+ * //Log.w("getmycards", str); String s = new String(); s = str.replace("\\",
+ * ""); //Log.w("aaaa", s); int l = s.length(); s = s.substring(1, l - 1);
+ * //Log.w("aaaa", s);
+ * 
+ * JSONArray jsonArray = new JSONArray(s); // Log.w("fdlkhgfd", "" +
+ * jsonArray.length());
+ * 
+ * length = jsonArray.length();
+ * 
+ * if (length > 0) {
+ * 
+ * for (int i = 0; i < jsonArray.length(); i++) { JSONObject obj =
+ * jsonArray.getJSONObject(i);
+ * 
+ * String name = obj.getString(MyCards.KEY_NAME); String cardno =
+ * obj.getString(KEY_CARD_PHONE_NO); String email = obj.getString(KEY_EMAIL);
+ * String compnyname = obj.getString(KEY_COMPANY_NAME); String designation =
+ * obj.getString(KEY_DESIGNATION); String cardtype =
+ * obj.getString(KEY_CARD_TYPE); String weburl = obj.getString(KEY_WEB_URL);
+ * String cardid = obj.getString(MyCards.KEY_CARD_ID);
+ * 
+ * HashMap<String, String> map = new HashMap<String, String>();
+ * //map.put(KEY_EMAIL, email); map.put(MyCards.KEY_CARD_ID,cardid);
+ * //map.put(KEY_COMPANY_NAME, compnyname); //map.put(KEY_CARD_PHONE_NO,
+ * cardno); map.put(KEY_DESIGNATION, designation); map.put(KEY_CARD_TYPE,
+ * cardtype); map.put(KEY_WEB_URL, weburl); map.put(KEY_CARD_ID, cardid);
+ * alldetails.add(map); } }
+ * 
+ * } else { Log.w("kljhfdg", "error"); }
+ * 
+ * 
+ * catch (Exception e) { Log.w("kljhfdg", "hello123" + e); } return null; }
+ * 
+ * @Override protected void onPostExecute(Void result) { // TODO Auto-generated
+ * method stub DisplayMetrics dm = new DisplayMetrics();
+ * getWindowManager().getDefaultDisplay().getMetrics(dm); int w =
+ * dm.widthPixels; if (length > 0) { adapter = new MyCardAdapter(MyCards.this,
+ * alldetails, w); gallery.setAdapter(adapter);
+ * 
+ * } else if (length == 0) { Toast.makeText(getApplicationContext(),
+ * "Please add your card First", 100).show();
+ * edit_head_text.setText("Fill all details to add new card");
+ * save.setVisibility(View.GONE); viewswitch.showNext(); }
+ * super.onPostExecute(result); }
+ * 
+ * } }
+ */
